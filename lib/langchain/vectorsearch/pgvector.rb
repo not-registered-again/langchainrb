@@ -27,12 +27,12 @@ module Langchain::Vectorsearch
     # @param index_name [String] The name of the table to use for the index
     # @param llm [Object] The LLM client to use
     # @param namespace [String] The namespace to use for the index when inserting/querying
-    def initialize(url:, index_name:, llm:, namespace: nil)
+    def initialize(db:, index_name:, llm:, namespace: nil)
       depends_on "sequel"
       depends_on "pgvector"
 
-      @db = Sequel.connect(url)
-
+      # @db = Sequel.connect(url)
+      @db = db
       @table_name = index_name
 
       @namespace_column = "namespace"
@@ -108,6 +108,12 @@ module Langchain::Vectorsearch
         column :vectors, "vector(#{vector_dimensions})"
         text namespace_column.to_sym, default: nil
       end
+
+      unless db.indexes(table_name.to_sym).any? { |name, index| index[:columns] == [namespace_column.to_sym] }
+        db.alter_table(table_name.to_sym) do
+          add_index namespace_column.to_sym
+        end
+      end
     end
 
     # Destroy default schema
@@ -161,6 +167,10 @@ module Langchain::Vectorsearch
 
       response.context = context
       response
+    end
+
+    def delete
+      documents_model.where(namespace_column.to_sym => namespace).delete
     end
   end
 end
